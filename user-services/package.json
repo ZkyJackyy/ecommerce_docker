@@ -1,0 +1,13 @@
+{
+    "name": "user-services",
+    "version": "1.0.0",
+    "description": "service for user management",
+    "main": "app.js",
+    "scripts": {
+        "start": "node app.js"
+    },
+    "dependencies": {
+        "express": "^4.19.2",
+        "cors": "^2.8.5"
+    }
+}

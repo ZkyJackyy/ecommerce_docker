@@ -1,0 +1,48 @@
+services:
+  product-service:
+    build: ./product-services
+    ports:
+      - "${PRODUCT_SERVICE_PORT}:3000"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: product-db
+      DB_NAME: productdb
+      DB_USER: product_user
+      DB_PASSWORD: product_pass
+    restart: always
+
+  product-db:
+    image: mysql:8.0.36
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: productdb
+      MYSQL_USER: product_user
+      MYSQL_PASSWORD: product_pass
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uproduct_user -pproduct_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  
+  # cart-service:
+  #   build: ./cart-services
+  #   ports:
+  #     - "8000:8000"
+  #   container_name: cart-services
+  #   restart: always
+
+  # review-service:
+  #   build: ./review-services
+  #   ports:
+  #     - "5002:5002"
+  #   container_name: review-services
+  #   restart: always
+
+volumes:
+  product-db-data:
+  
+  
