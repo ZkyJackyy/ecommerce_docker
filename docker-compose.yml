@@ -27,6 +27,18 @@ services:
       timeout: 5s
       retries: 15
 
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: ecommerce-docker
+    restart: always
+    ports:
+      - "8081:80"  # Akses via localhost:8081
+    environment:
+      PMA_HOST: product-db
+      MYSQL_ROOT_PASSWORD: root
+    depends_on:
+      - product-db
+
   
   # cart-service:
   #   build: ./cart-services
@@ -35,14 +47,52 @@ services:
   #   container_name: cart-services
   #   restart: always
 
-  # review-service:
-  #   build: ./review-services
-  #   ports:
-  #     - "5002:5002"
-  #   container_name: review-services
-  #   restart: always
+  review-service:
+    build: ./review-services
+    ports:
+      - "5002:5002"
+    # container_name: review-services
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - mongo-db
+    environment:
+      - MONGO_URL=mongodb://admin:admin123@mongo-db:27017/reviewdb?authSource=admin
+
+
+  
+  mongo-db:
+    image: mongo:latest
+    # container_name: mongo-db-v2
+    env_file:
+      - .env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME}
+    ports:
+      - "${MONGO_PORT}:27017"
+    volumes:
+      - mongo-db-data:/data/db
+    restart: always
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: mongo-express
+    env_file:
+      - .env
+    environment:
+      ME_CONFIG_BASICAUTH: "true"
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo-db:27017/?authSource=admin
+    ports:
+      - "${MONGO_EXPRESS_PORT}:8081"
+    restart: always
+    depends_on:
+      - mongo-db
 
 volumes:
   product-db-data:
-  
-  
+  mongo-db-data:
