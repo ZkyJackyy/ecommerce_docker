@@ -2,132 +2,113 @@
 
 /** @var \Laravel\Lumen\Routing\Router $router */
 
-$router->get('/cart', function () use ($router) {
-    return ' Cart Service is running ';
-});
+use Illuminate\Http\Request;
 
-// Dummy cart data (diperbaiki agar lebih mudah dimanipulasi di POST)
-// Kita menggunakan array biasa, bukan array asosiatif di level terluar items
-$cartItems = [
-    [
-        'id' => 1,
-        'product_id' => 101, // Menambahkan product_id untuk identifikasi unik item produk
-        'name' => 'Product A',
-        'quantity' => 2,
-        'price' => 50.00
-    ],
-    [
-        'id' => 2,
-        'product_id' => 102,
-        'name' => 'Product B',
-        'quantity' => 1,
-        'price' => 30.00
-    ]
-];
+// File untuk menyimpan data keranjang (sebagai pengganti database)
+// Disimpan di folder storage agar bisa ditulis
+define('CART_FILE', storage_path('app/cart_data.json'));
 
-// Helper function untuk menghitung total
-function calculateTotal($items)
+// Helper: Baca Data
+function getCart()
 {
-    $total = 0.00;
-    foreach ($items as $item) {
-        $total += $item['price'] * $item['quantity'];
+    if (!file_exists(CART_FILE)) {
+        return [];
     }
-    return $total;
+    $json = file_get_contents(CART_FILE);
+    return json_decode($json, true) ?? [];
 }
+
+// Helper: Simpan Data
+function saveCart($data)
+{
+    // Pastikan folder storage ada
+    if (!is_dir(dirname(CART_FILE))) mkdir(dirname(CART_FILE), 0777, true);
+    file_put_contents(CART_FILE, json_encode($data, JSON_PRETTY_PRINT));
+}
+
+$router->get('/cart', function () {
+    return 'Cart Service is running (File Based)';
+});
 
 // ----------------------------------------------------
 // 1. GET ALL CARTS
 // ----------------------------------------------------
-$router->get('/carts', function () use (&$cartItems) {
-    // Menggunakan & untuk mereferensikan variabel di luar agar bisa diubah.
-    $response = [
-        'items' => $cartItems,
-        'total' => calculateTotal($cartItems)
-    ];
-    return response()->json($response);
-});
+$router->get('/carts', function () {
+    $cartItems = getCart();
 
-// ----------------------------------------------------
-// 2. GET CART BY ITEM ID
-// ----------------------------------------------------
-$router->get('/carts/{id}', function ($id) use (&$cartItems) {
-    $cartId = (int) $id;
+    // Hitung total
+    $total = 0;
     foreach ($cartItems as $item) {
-        if ($item['id'] === $cartId) {
-            return response()->json($item);
-        }
+        $total += $item['price'] * $item['quantity'];
     }
-    return response()->json(['message' => 'Item not found'], 404);
+
+    return response()->json([
+        'items' => array_values($cartItems),
+        'total' => $total
+    ]);
 });
 
 // ----------------------------------------------------
-// 3. POST ADD TO CART (ENDPOINT BARU)
+// 2. ADD TO CART
 // ----------------------------------------------------
-$router->post('/carts', function () use (&$cartItems) {
-    // Ambil request body
-    $request = app('request');
-    $data = $request->json()->all();
+$router->post('/carts', function (Request $request) {
+    $cartItems = getCart();
 
-    // Validasi data minimal
-    if (!isset($data['product_id']) || !isset($data['name']) || !isset($data['price'])) {
-        return response()->json(['message' => 'Data produk tidak lengkap.'], 400);
+    $id = (int) $request->input('product_id');
+    $name = $request->input('name');
+    $price = (float) $request->input('price');
+    $qty = (int) $request->input('quantity', 1);
+
+    if (!$id || !$name || !$price) {
+        return response()->json(['message' => 'Data tidak lengkap'], 400);
     }
 
-    $productId = (int) $data['product_id'];
-    $name = $data['name'];
-    $price = (float) $data['price'];
-    $quantity = (isset($data['quantity']) && $data['quantity'] > 0) ? (int) $data['quantity'] : 1;
-
-    // Cek apakah item sudah ada di keranjang berdasarkan product_id
+    // Cek apakah produk sudah ada?
     $found = false;
-    foreach ($cartItems as &$item) { // Gunakan & untuk modifikasi array di tempat
-        if ($item['product_id'] === $productId) {
-            $item['quantity'] += $quantity; // Tambah kuantitas
+    foreach ($cartItems as $key => $item) {
+        if ($item['product_id'] === $id) {
+            $cartItems[$key]['quantity'] += $qty;
             $found = true;
             break;
         }
     }
 
-    // Jika item belum ada, tambahkan item baru
+    // Jika baru, tambah ke array
     if (!$found) {
-        // Buat ID baru (simulasi auto-increment)
-        $newId = empty($cartItems) ? 1 : max(array_column($cartItems, 'id')) + 1;
-
-        $newItem = [
-            'id' => $newId,
-            'product_id' => $productId,
+        $cartItems[] = [
+            'id' => count($cartItems) + 1, // ID unik keranjang
+            'product_id' => $id,
             'name' => $name,
-            'quantity' => $quantity,
             'price' => $price,
+            'quantity' => $qty
         ];
-        $cartItems[] = $newItem;
-        $item = $newItem; // Untuk response
     }
 
-    // Beri respons item yang ditambahkan/diperbarui
-    return response()->json([
-        'message' => 'Item berhasil ditambahkan ke keranjang',
-        'item' => $item ?? $newItem // Menggunakan $item jika sudah ada, $newItem jika baru
-    ], 201);
+    // SIMPAN KE FILE (PENTING!)
+    saveCart($cartItems);
+
+    return response()->json(['message' => 'Berhasil masuk keranjang']);
 });
 
 // ----------------------------------------------------
-// 4. DELETE ITEM FROM CARTS (Perbaikan Logika)
+// 3. DELETE ITEM
 // ----------------------------------------------------
-$router->delete('/carts/{id}', function ($id) use (&$cartItems) {
-    $cartId = (int) $id;
+$router->delete('/carts/{productId}', function ($productId) {
+    $cartItems = getCart();
     $initialCount = count($cartItems);
+    $pId = (int) $productId;
 
-    // Filter array untuk menghapus item dengan ID yang cocok
-    $cartItems = array_values(array_filter($cartItems, function ($item) use ($cartId) {
-        return $item['id'] !== $cartId;
-    }));
+    // Hapus item berdasarkan product_id
+    $newCart = array_filter($cartItems, function ($item) use ($pId) {
+        return $item['product_id'] !== $pId;
+    });
 
-    // Cek apakah ada yang dihapus
-    if (count($cartItems) === $initialCount) {
-        return response()->json(['message' => 'Item not found'], 404);
+    if (count($newCart) === $initialCount) {
+        return response()->json(['message' => 'Item tidak ditemukan'], 404);
     }
 
-    // Asumsi berhasil jika count berubah
-    return response()->json(['message' => 'Item deleted successfully']);
+    // Simpan perubahan
+    saveCart(array_values($newCart));
+
+    return response()->json(['message' => 'Item dihapus']);
 });

@@ -40,12 +40,13 @@ services:
       - product-db
 
   
-  # cart-service:
-  #   build: ./cart-services
-  #   ports:
-  #     - "8000:8000"
-  #   container_name: cart-services
-  #   restart: always
+  cart-service:
+      build: ./cart-services
+      ports:
+        - "8000:8000"
+      container_name: cart-services
+      restart: always
+      # Tidak butuh environment database apapun
 
   review-service:
     build: ./review-services
@@ -93,6 +94,51 @@ services:
     depends_on:
       - mongo-db
 
+
+  # ==============================
+  # 3. USER SERVICE (PostgreSQL)
+  # ==============================
+  user-service:
+    build: ./user-services
+    ports:
+      - "${USER_SERVICE_PORT}:4000"
+    restart: always
+    depends_on:
+      - user-db
+    environment:
+      # Aplikasi Node.js akan membaca variabel ini
+      DB_HOST: user-db
+      DB_USER: ${POSTGRES_USER}      # Ambil dari .env
+      DB_PASSWORD: ${POSTGRES_PASSWORD} # Ambil dari .env
+      DB_NAME: ${POSTGRES_DB}        # Ambil dari .env
+      PORT: 4000
+
+  user-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      # Image Postgres butuh nama variabel spesifik ini
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: user-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "5050:80"
+    depends_on:
+      - user-db
+
 volumes:
   product-db-data:
   mongo-db-data:
+  user-db-data: # Pastikan volume ini ada
